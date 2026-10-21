@@ -22,4 +22,4 @@ target_include_directories(gemmtestgpu
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(gemmtestgpu PRIVATE CUDA::cudart CUDA::curand)
+target_link_libraries(gemmtestgpu PRIVATE CUDA::cudart)

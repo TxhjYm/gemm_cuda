@@ -12,7 +12,7 @@ GPU with a compatible driver.
 ./run.sh
 ```
 
-The executable tests the naive CUDA GEMM kernel with reproducible cuRAND input,
-compares its output against a CPU reference, and reports average kernel latency
-and estimated throughput. Other GEMM implementation files are still
+The executable generates reproducible input on the host, copies it to the GPU,
+tests the naive CUDA GEMM kernel once against a CPU reference, and reports
+whether the results match. Other GEMM implementation files are still
 placeholders.
