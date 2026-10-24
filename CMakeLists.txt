@@ -8,18 +8,29 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 find_package(CUDAToolkit REQUIRED)
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
+    add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
+else()
+    find_package(GTest CONFIG REQUIRED)
+endif()
+
 file(GLOB SOURCES_CPU CONFIGURE_DEPENDS src/cpu/*.cpp)
 file(GLOB SOURCES_GPU CONFIGURE_DEPENDS src/cuda/*.cu)
 
-add_executable(gemmtestgpu
-    src/main.cu
+enable_testing()
+
+add_executable(gemm_tests
+    tests/test_gemm.cu
     ${SOURCES_CPU}
     ${SOURCES_GPU}
 )
 
-target_include_directories(gemmtestgpu
+target_include_directories(gemm_tests
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(gemmtestgpu PRIVATE CUDA::cudart)
+target_link_libraries(gemm_tests PRIVATE CUDA::cudart GTest::gtest_main)
+
+include(GoogleTest)
+gtest_discover_tests(gemm_tests)
