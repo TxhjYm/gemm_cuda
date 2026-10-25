@@ -27,8 +27,9 @@ For an existing checkout, initialize or update the GoogleTest submodule with:
 ./run.sh GemmTest.Naive* GemmTest.Shared*
 ```
 
-`./run.sh` runs the GoogleTest suite. Test names can be exact names or
+`./run.sh` runs the GoogleTest suite. It benchmarks the naive, shared-memory
+tiled, and cuBLAS GEMM implementations using CUDA events after warmup, and
+checks each result against a CPU reference. Test names can be exact names or
 GoogleTest filter patterns; when multiple names or patterns are provided, they
-are combined as alternatives. The tests compare the naive and shared-memory
-tiled CUDA GEMM kernels with a CPU reference on a non-tile-aligned matrix
-shape. Tests are skipped when no CUDA device is available.
+are combined as alternatives. All implementations use a non-tile-aligned
+matrix shape. Tests are skipped when no CUDA device is available.

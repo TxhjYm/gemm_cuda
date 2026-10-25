@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <gtest/gtest.h>
 
 #include "gemm.h"
@@ -54,9 +55,13 @@ protected:
                   cudaSuccess);
         ASSERT_EQ(cudaEventCreate(&start_event_), cudaSuccess);
         ASSERT_EQ(cudaEventCreate(&stop_event_), cudaSuccess);
+        ASSERT_EQ(cublasCreate(&cublas_handle_), CUBLAS_STATUS_SUCCESS);
     }
 
     void TearDown() override {
+        if (cublas_handle_ != nullptr) {
+            EXPECT_EQ(cublasDestroy(cublas_handle_), CUBLAS_STATUS_SUCCESS);
+        }
         if (stop_event_ != nullptr) {
             EXPECT_EQ(cudaEventDestroy(stop_event_), cudaSuccess);
         }
@@ -107,6 +112,45 @@ protected:
                   << " launches after " << kWarmupIterations
                   << " warmup launches)\n";
 
+        ExpectOutputMatchesReference();
+    }
+
+    void ExpectCublasMatchesReference() {
+        constexpr float alpha = 1.0f;
+        constexpr float beta = 0.0f;
+        const auto run_cublas = [&]() {
+            return cublasSgemm(cublas_handle_, CUBLAS_OP_N, CUBLAS_OP_N,
+                               kN, kM, kK, &alpha, device_b_, kN, device_a_,
+                               kK, &beta, device_c_, kN);
+        };
+
+        for (int i = 0; i < kWarmupIterations; ++i) {
+            ASSERT_EQ(run_cublas(), CUBLAS_STATUS_SUCCESS)
+                << "warmup launch " << i;
+        }
+        ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+        ASSERT_EQ(cudaEventRecord(start_event_), cudaSuccess);
+        for (int i = 0; i < kTimedIterations; ++i) {
+            ASSERT_EQ(run_cublas(), CUBLAS_STATUS_SUCCESS)
+                << "timed launch " << i;
+        }
+        ASSERT_EQ(cudaEventRecord(stop_event_), cudaSuccess);
+        ASSERT_EQ(cudaEventSynchronize(stop_event_), cudaSuccess);
+
+        float elapsed_milliseconds = 0.0f;
+        ASSERT_EQ(cudaEventElapsedTime(&elapsed_milliseconds, start_event_,
+                                       stop_event_),
+                  cudaSuccess);
+        std::cout << "[ PERF ] cuBLAS: "
+                  << elapsed_milliseconds / kTimedIterations
+                  << " ms/iteration (average of " << kTimedIterations
+                  << " launches after " << kWarmupIterations
+                  << " warmup launches)\n";
+
+        ExpectOutputMatchesReference();
+    }
+
+    void ExpectOutputMatchesReference() {
         ASSERT_EQ(cudaMemcpy(host_c_.data(), device_c_,
                              c_count_ * sizeof(float),
                              cudaMemcpyDeviceToHost),
@@ -138,6 +182,7 @@ private:
     float* device_c_ = nullptr;
     cudaEvent_t start_event_ = nullptr;
     cudaEvent_t stop_event_ = nullptr;
+    cublasHandle_t cublas_handle_ = nullptr;
 };
 
 TEST_F(GemmTest, NaiveKernelMatchesReference) {
@@ -146,6 +191,10 @@ TEST_F(GemmTest, NaiveKernelMatchesReference) {
 
 TEST_F(GemmTest, SharedTilingKernelMatchesReference) {
     ExpectKernelMatchesReference(gemm_shared_tiling, "gemm_shared_tiling");
+}
+
+TEST_F(GemmTest, CublasMatchesReference) {
+    ExpectCublasMatchesReference();
 }
 
 }  // namespace

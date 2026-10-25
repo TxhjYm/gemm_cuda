@@ -30,7 +30,11 @@ target_include_directories(gemm_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(gemm_tests PRIVATE CUDA::cudart GTest::gtest_main)
+target_link_libraries(gemm_tests PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+    GTest::gtest_main
+)
 
 include(GoogleTest)
 gtest_discover_tests(gemm_tests)
