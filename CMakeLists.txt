@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
+option(GEMM_CUDA_LINEINFO "Include CUDA line information for profiling" OFF)
+
 find_package(CUDAToolkit REQUIRED)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
@@ -35,6 +37,12 @@ target_link_libraries(gemm_tests PRIVATE
     CUDA::cublas
     GTest::gtest_main
 )
+
+if(GEMM_CUDA_LINEINFO)
+    target_compile_options(gemm_tests PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+    )
+endif()
 
 include(GoogleTest)
 gtest_discover_tests(gemm_tests)

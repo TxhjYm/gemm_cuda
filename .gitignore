@@ -1,4 +1,6 @@
 /build/
+/build-ncu/
+/results/ncu/
 /cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
