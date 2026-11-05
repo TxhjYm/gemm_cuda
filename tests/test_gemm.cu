@@ -193,6 +193,10 @@ TEST_F(GemmTest, SharedTilingKernelMatchesReference) {
     ExpectKernelMatchesReference(gemm_shared_tiling, "gemm_shared_tiling");
 }
 
+TEST_F(GemmTest, RegisterTilingKernelMatchesReference) {
+    ExpectKernelMatchesReference(gemm_register_tiling, "gemm_register_tiling");
+}
+
 TEST_F(GemmTest, CublasMatchesReference) {
     ExpectCublasMatchesReference();
 }
