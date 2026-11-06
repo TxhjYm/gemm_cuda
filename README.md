@@ -29,6 +29,19 @@ git clone --recurse-submodules git@github.com:TxhjYm/gemm_cuda.git
 ./run.sh GemmTest.Naive* GemmTest.Shared*
 ```
 
+默认使用 Release 构建（CUDA `-O3`），并针对计算能力 7.5 编译，兼容
+T4 GPU。普通的 `75` 架构设置会同时生成 `sm_75` 机器码和 `compute_75` PTX；
+更新的 GPU 可以通过驱动 JIT 编译 PTX 运行。也可以在配置时选择其他架构，
+例如：
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES="75;90"
+cmake --build build --parallel
+```
+
+这样会为 T4 和 H100 分别生成原生机器码；CUDA Toolkit 需要支持所选的所有架构。
+
 `./run.sh` 会运行 GoogleTest 测试集。测试会在预热后使用 CUDA Event 测量
 naive、shared-memory tiling 和 cuBLAS GEMM，并将结果与 CPU 参考实现进行比较。
 测试名可以是完整名称或 GoogleTest filter；提供多个名称或 filter 时会作为

@@ -1,4 +1,14 @@
 cmake_minimum_required(VERSION 3.18)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75 CACHE STRING
+        "CUDA architectures to compile for" FORCE)
+endif()
+
 project(gemmgpu VERSION 1.0.0 LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
