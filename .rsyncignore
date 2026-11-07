@@ -1,0 +1,6 @@
+build/
+results/
+.git/
+*.o
+*.so
+*.nsight-cuprof

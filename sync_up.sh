@@ -1,0 +1,1 @@
+rsync -avz -e 'ssh -p 2222' --delete --exclude-from='.rsyncignore' ../gemm_cuda/ zhuwenjie@100.93.80.22:~/work/gemm_cuda
