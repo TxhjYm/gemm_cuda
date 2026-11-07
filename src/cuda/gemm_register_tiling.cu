@@ -53,20 +53,21 @@
 //     注意：160 个 block 在 114 个 SM 上仍只有 1.4 waves，每 SM 约 4~8 个
 //     warp；继续减小 tile（如 32x32/64 线程 -> 320 个 block）还能改善负载均衡。
 //
-// [B] 下一步首选：把 load 循环完全展开（33.4 -> 约 20 us）
-//     现在 A/B 的加载循环步长是 blockDim.x / BK（运行时值），ptxas 只能部分
-//     展开（SASS 里以 4 条 LDG 为一组，每组仍要等一次访存延迟）。改成编译期
-//     常量并 #pragma unroll，让所有 LDG 背靠背发出：
+// [B] 已应用：编译期确定加载步长，并展开加载和外积计算循环
+//     kThreads = (BM / TM) * (BN / TN)，strideA = kThreads / BK，
+//     strideB = kThreads / BN；当前配置下分别为 128、16、2。A 加载循环
+//     每线程执行 2 次，B 加载循环每线程执行 4 次；两个循环及 dotIdx
+//     外积计算循环均加了 #pragma unroll。加载循环保留 offset 写法即可：
 //
-//         constexpr int kThreads = (BM / TM) * (BN / TN);
 //         #pragma unroll
-//         for (int i = 0; i < BM / (kThreads / BK); ++i) {
-//             int localRow = innerRowA + i * (kThreads / BK);
+//         for (int offset = 0; offset < BM; offset += strideA) {
+//             int localRow = innerRowA + offset;
 //             ...
 //         }
 //
-//     compute 循环（dotIdx / regM / regN / 累加）也要加 #pragma unroll
-//     （它们的边界本来就是常量）。同配置 standalone 实测 33.4 -> 20.2 us。
+//     修改 tile 尺寸或线程布局时，要确认 kThreads 与实际 block 大小一致，
+//     且每线程步长可覆盖 tile。完全展开提供更多指令调度空间，但不保证
+//     所有 LDG 都背靠背发出；性能收益需在目标 GPU/配置上实测。
 //
 // [C] 可选：As padding，消除 bank conflict
 //     As[BM][BK + 1]（行距 9 个 float）可以打散 bank。但收益取决于每个 warp
@@ -83,7 +84,11 @@
 // [E] 不要过早做 double buffering / 寄存器预取
 //     64 线程版本把下一块 tile 预取到寄存器后，寄存器涨到 160，实测反而
 //     36 us（不预取 30.7 us）；当前几何下预取也只有约 1 us 的波动。
-//     先把 [B][D] 做完，需要流水线时用 sm_80+ 的 cp.async。
+//     double buffering 是缓冲/流水线策略，并非只能在 sm_80+ 实现；较老架构
+//     也可用普通 global load、shared memory 和同步来实现，但异步搬运与计算
+//     重叠的能力和开销不同。sm_80+ 才支持 cp.async，可用于异步拷贝 global
+//     memory 到 shared memory；需要流水线时可优先评估它，并实测寄存器、占用率
+//     和性能收益。
 //
 // [F] 编译目标架构
 //     CMakeLists.txt 目前只生成 sm_75，H100 上靠驱动 JIT compute_75 PTX 运行
@@ -116,6 +121,7 @@ constexpr int BK = 8;
 constexpr int BN = 64;
 constexpr int TM = 4;
 constexpr int TN = 4;
+constexpr int kThreads = (BM / TM) * (BN / TN);
 
 }  // namespace
 
@@ -131,12 +137,12 @@ __global__ void gemm_register_tiling_kernel(const float* A, const float* B, floa
     // 加载 As[BM][BK] 的索引：128个线程，BK=8列 → 每轮16行，stride=16，共2轮
     const int innerRowA = threadIdx.x / BK;   // 0~15
     const int innerColA = threadIdx.x % BK;   // 0~7
-    const int strideA = blockDim.x / BK;      // 16
+    constexpr int strideA = kThreads / BK;      // 16
 
     // 加载 Bs[BK][BN] 的索引：128个线程，BN=64列 → 每轮2行，stride=2，共4轮
     const int innerRowB = threadIdx.x / BN;   // 0~1
     const int innerColB = threadIdx.x % BN;   // 0~63
-    const int strideB = blockDim.x / BN;      // 2
+    constexpr int strideB = kThreads / BN;      // 2
 
     __shared__ float As[BM][BK];
     __shared__ float Bs[BK][BN];
@@ -147,6 +153,7 @@ __global__ void gemm_register_tiling_kernel(const float* A, const float* B, floa
 
     for (int t = 0; t < (K + BK - 1) / BK; t++) {
         // 协作加载 As
+        #pragma unroll
         for (int offset = 0; offset < BM; offset += strideA) {
             int localRow = innerRowA + offset;
             int globalRow = tileRow * BM + localRow;
@@ -158,6 +165,7 @@ __global__ void gemm_register_tiling_kernel(const float* A, const float* B, floa
         }
 
         // 协作加载 Bs
+        #pragma unroll
         for (int offset = 0; offset < BK; offset += strideB) {
             int localRow = innerRowB + offset;
             int globalRow = t * BK + localRow;
@@ -171,6 +179,7 @@ __global__ void gemm_register_tiling_kernel(const float* A, const float* B, floa
         __syncthreads();
 
         // 计算：外积累加
+        #pragma unroll
         for (int dotIdx = 0; dotIdx < BK; dotIdx++) {
             for (int i = 0; i < TM; i++)
                 regM[i] = As[threadRow * TM + i][dotIdx];
